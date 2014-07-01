@@ -71,7 +71,7 @@ def ConvertToDBBounds(bounds, ZLevel=None):
             if ZLevel is None:
                 raise ValueError("ZLevel must be specified if a rectangle is passed")
             db_bounds = CreateBoundingRect(bounds.ToArray(), ZLevel)
-        elif isinstance(bounds, tuple) or isinstance(bounds, list):
+        else:  # isinstance(bounds, tuple) or isinstance(bounds, list) or isinstance(bounds):
             if len(bounds) == 4:
                 if ZLevel is None:
                     raise ValueError("ZLevel must be specified if a rectangle is passed")
