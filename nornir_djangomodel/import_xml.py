@@ -6,6 +6,7 @@ Created on Jun 11, 2014
 import os
 import nornir_volumemodel
 import nornir_imageregistration
+import nornir_imageregistration.files
 import nornir_imageregistration.transforms
 from nornir_imageregistration.spatial import *
 import glob
@@ -201,7 +202,7 @@ class VolumeXMLImporter():
                     ZLevel = parent_dict['section'].Number
                     self.AddChannelMosaic(channel_obj, transform_obj, ZLevel)
 
-    def CreateTileCoordSpace(self, channel, name, bounds, scale=None):
+    def GetOrCreateTileCoordSpace(self, channel, name, bounds, scale=None):
 
         section = channel.Parent
         coord_space_name = models.CoordSpace.SectionChannelName(section.Number, channel.Name, name)
@@ -221,10 +222,11 @@ class VolumeXMLImporter():
 
         (db_channel, created) = models.Channel.objects.get_or_create(name=channel.Name)
 
-        try:
-            mosaic = nornir_imageregistration.mosaic.Mosaic.LoadFromMosaicFile(transform_obj.FullPath)
-        except ValueError as e:
+        mosaicfile = nornir_imageregistration.files.MosaicFile.Load(transform_obj.FullPath)
+        if mosaicfile is None:
             return
+
+        mosaic = nornir_imageregistration.mosaic.Mosaic(mosaicfile.ImageToTransformString)
 
         db_bounds = CreateBoundingRect(mosaic.FixedBoundingBox, minZ=ZLevel)
         db_mosaic_coordspace = GetOrCreateCoordSpace(self.dataset_name, transform_obj.Name, bounds=db_bounds)
@@ -236,7 +238,7 @@ class VolumeXMLImporter():
 
             db_bounds = ConvertToDBBounds(transform.MappedBoundingBox, ZLevel=ZLevel)
 
-            db_tile_coordspace = self.CreateTileCoordSpace(channel, 'Tile%d' % tile_number, db_bounds, ZLevel)
+            db_tile_coordspace = self.GetOrCreateTileCoordSpace(channel, 'Tile%d' % tile_number, db_bounds, ZLevel)
 
     #         (db_tile, created) = models.Tile.objects.get_or_create(number=int(tile_number),
     #                                                                name=name,
@@ -245,7 +247,8 @@ class VolumeXMLImporter():
     #         if created:
     #             db_tile.save()
 
-            transform_string = nornir_imageregistration.transforms.factory.TransformToIRToolsString(transform)
+            # transform_string = nornir_imageregistration.transforms.factory.TransformToIRToolsString(transform)
+            transform_string = mosaicfile.ImageToTransformString[name]
             db_dest_bounding_box = CreateBoundingRect(transform.FixedBoundingBox, ZLevel)
 
             (db_mapping, created) = models.Mapping2D.objects.get_or_create(
@@ -287,7 +290,7 @@ class VolumeXMLImporter():
 
                 (height, width) = nornir_imageregistration.GetImageSize(image_path)
                 db_bounds = CreateBoundingRect(Rectangle.CreateFromPointAndArea((0, 0), (height, width)), minZ=ZLevel)
-                db_tile_coordspace = self.CreateTileCoordSpace(channel, 'Tile%d' % int(img_number), bounds=db_bounds)
+                db_tile_coordspace = self.GetOrCreateTileCoordSpace(channel, 'Tile%d' % int(img_number), bounds=db_bounds)
                 # db_tile_mapping = GetTileMapping(tile_number=img_number, Z=ZLevel, )
 
                 img_rel_path = os.path.join(rel_path, img_name)
