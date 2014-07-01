@@ -190,7 +190,7 @@ class ScaleBase(models.Model):
 class CoordSpace(ScaleBase):
     '''A coordinate space'''
 
-    name = models.CharField("Name", max_length=256, primary_key=True)
+    name = models.CharField("Name", max_length=128, primary_key=True)
     dataset = models.ForeignKey("Dataset", related_name="coord_spaces", related_query_name="coord_space")
     bounds = models.ForeignKey(BoundingBox, null=True, help_text="Bounding box of known points in the space")
 
