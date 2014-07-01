@@ -93,7 +93,7 @@ def GetOrCreateCoordSpace(db_dataset_name, coord_space_name, bounds):
     :return: section#.channel.name
     '''
 
-    print("Create coord space: %s" % (coord_space_name))
+
 
     db_bounds = ConvertToDBBounds(bounds)
     db_dataset = models.Dataset.objects.get(name=db_dataset_name)
@@ -108,6 +108,7 @@ def GetOrCreateCoordSpace(db_dataset_name, coord_space_name, bounds):
 
     if need_save:
         db_coordspace.save()
+        print("Created coord space: %s" % (coord_space_name))
 
     return db_coordspace
 
@@ -207,11 +208,12 @@ class VolumeXMLImporter():
 
         db_coordspace = GetOrCreateCoordSpace(self.dataset_name, coord_space_name, bounds)
 
-        db_coordspace.xscale = models.Scale(value=channel.Scale.X.UnitsPerPixel, units=channel.Scale.X.UnitsOfMeasure)
-        db_coordspace.yscale = models.Scale(value=channel.Scale.Y.UnitsPerPixel, units=channel.Scale.Y.UnitsOfMeasure)
-        db_coordspace.zscale = None
+        if db_coordspace.xscale is None or db_coordspace.xscale.value != channel.Scale.X.UnitsPerPixel or db_coordspace.yscale.value != channel.Scale.Y.UnitsPerPixel:
+            db_coordspace.xscale = models.Scale(value=channel.Scale.X.UnitsPerPixel, units=channel.Scale.X.UnitsOfMeasure)
+            db_coordspace.yscale = models.Scale(value=channel.Scale.Y.UnitsPerPixel, units=channel.Scale.Y.UnitsOfMeasure)
+            db_coordspace.zscale = None
 
-        db_coordspace.save()
+            db_coordspace.save()
 
         return db_coordspace
 
