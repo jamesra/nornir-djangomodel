@@ -268,8 +268,12 @@ class VolumeXMLImporter():
         (db_channel, created) = models.Channel.objects.get_or_create(name=channel.Name)
         (db_filter, created) = models.Filter.objects.get_or_create(name=filter_name, channel=db_channel)
 
+
+
         for level in tile_pyramid.Levels:
             level_number = level.Number
+
+            print("Adding %s.%s.%d" % (channel.Name, filter_name, level.Number))
 
             self.BulkAddData2D(channel,
                           level.FullPath,
