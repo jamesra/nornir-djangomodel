@@ -218,7 +218,11 @@ class VolumeXMLImporter():
     def AddChannelMosaic(self, channel, transform_obj, ZLevel):
 
         (db_channel, created) = models.Channel.objects.get_or_create(name=channel.Name)
-        mosaic = nornir_imageregistration.mosaic.Mosaic.LoadFromMosaicFile(transform_obj.FullPath)
+
+        try:
+            mosaic = nornir_imageregistration.mosaic.Mosaic.LoadFromMosaicFile(transform_obj.FullPath)
+        except ValueError as e:
+            return
 
         db_bounds = CreateBoundingRect(mosaic.FixedBoundingBox, minZ=ZLevel)
         db_mosaic_coordspace = GetOrCreateCoordSpace(self.dataset_name, transform_obj.Name, bounds=db_bounds)
