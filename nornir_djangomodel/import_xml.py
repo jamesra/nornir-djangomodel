@@ -4,6 +4,7 @@ Created on Jun 11, 2014
 @author: u0490822
 '''
 import os
+import copy
 import nornir_volumemodel
 import nornir_imageregistration
 import nornir_imageregistration.files
@@ -11,6 +12,51 @@ import nornir_imageregistration.transforms
 from nornir_imageregistration.spatial import *
 import glob
 from . import models
+import pickle
+
+
+class QuickPickleHelper():
+    cachepath = os.curdir
+
+    @classmethod
+    def SaveVariable(cls, var, filename):
+        fullpath = os.path.join(QuickPickleHelper.cachepath, filename)
+
+        if not os.path.exists(os.path.dirname(fullpath)):
+            os.makedirs(os.path.dirname(fullpath))
+
+        with open(fullpath, 'wb') as filehandle:
+            print("Saving: " + fullpath)
+            pickle.dump(var, filehandle)
+
+    @classmethod
+    def ReadOrCreateVariable(cls, varname, createfunc=None, **kwargs):
+        '''Reads variable from disk, call createfunc if it does not exist'''
+
+        var = None
+        if hasattr(cls, varname):
+            var = getattr(cls, varname)
+
+        if var is None:
+            path = os.path.join(QuickPickleHelper.cachepath, varname + ".pickle")
+            if os.path.exists(path):
+                with open(path, 'rb') as filehandle:
+                    try:
+                        var = pickle.load(filehandle)
+                        print("Loaded %s variable from pickle file: " % (varname))
+                    except:
+                        var = None
+                        print("Unable to load %s variable from pickle file: %s" % (varname, path))
+
+            if var is None and not createfunc is None:
+                var = createfunc(**kwargs)
+                cls.SaveVariable(var, path)
+                setattr(cls, varname, var)
+                print("Created %s variable from create function" % (varname))
+        else:
+            print("Found %s variable already in memory" % (varname))
+
+        return var
 
 
 def GetOrCreateDataset(Name, Path):
@@ -55,6 +101,21 @@ def CreateBoundingBox(bounds):
     db_boundingbox.save()
     return db_boundingbox
 
+def GetOrCreateBoundingBox(bounds):
+    '''
+    :param rect bounds: (minZ minY minX MaxZ MaxY maxX)
+    '''
+    (db_boundingbox, created) = models.BoundingBox.objects.get_or_create(minX=bounds[iBox.MinX],
+                                                              minY=bounds[iBox.MinY],
+                                                              minZ=bounds[iBox.MinZ],
+                                                              maxX=bounds[iBox.MaxX],
+                                                              maxY=bounds[iBox.MaxY],
+                                                              maxZ=bounds[iBox.MaxZ])
+
+    if created:
+        db_boundingbox.save()
+    return db_boundingbox
+
 
 def GetCoordSpace(channel, name):
     section = channel.Parent
@@ -86,7 +147,7 @@ def ConvertToDBBounds(bounds, ZLevel=None):
     return db_bounds
 
 
-def GetOrCreateCoordSpace(db_dataset_name, coord_space_name, bounds):
+def GetOrCreateCoordSpace(db_dataset, coord_space_name, bounds, ForceSaveOnCreate=False):
     '''
     :param Channel channel: The nornir channel which our space originates from
     :param name name: The name of the space, usually derived from the transform
@@ -94,24 +155,26 @@ def GetOrCreateCoordSpace(db_dataset_name, coord_space_name, bounds):
     :return: section#.channel.name
     '''
 
-
-
     db_bounds = ConvertToDBBounds(bounds)
-    db_dataset = models.Dataset.objects.get(name=db_dataset_name)
+    # db_dataset = models.Dataset.objects.get(name=db_dataset_name)
 
     (db_coordspace, created) = models.CoordSpace.objects.get_or_create(name=coord_space_name,
                                                                        dataset=db_dataset)
 
     need_save = created
-    if db_coordspace.bounds is None and not db_bounds is None:
-        db_coordspace.bounds = db_bounds
-        need_save = True
+    if not db_bounds is None:
+        # Trying to avoid looking up the relation unless necessary
+        if created:
+            db_coordspace.bounds = db_bounds
+            need_save = True
 
-    if need_save:
-        db_coordspace.save()
-        print("Created coord space: %s" % (coord_space_name))
+    if ForceSaveOnCreate:
+        if need_save:
+            db_coordspace.save()
 
-    return db_coordspace
+        return db_coordspace
+
+    return (db_coordspace, need_save)
 
 
 def _iterate_volume_channels(volumexml_model):
@@ -145,20 +208,34 @@ class VolumeXMLImporter():
         '''The dataset name this importer is importing to'''
         return self._dataset_name
 
+
     @property
     def db_dataset(self):
-        return models.Dataset.objects.get(name=self.dataset_name)
+        if self._db_dataset is None:
+            self._db_dataset = models.Dataset.objects.get(name=self.dataset_name)
+
+        return self._db_dataset
 
     def __init__(self, volumexml_model):
         self._volumexml_model = volumexml_model
         self._dataset_name = volumexml_model.Name
+        self._db_dataset = None
+
+    @classmethod
+    def _LoadVolumeFromCacheIfPossible(cls, vol_model):
+        assert(isinstance(vol_model, str))
+        import_dirname = os.path.dirname(vol_model)
+        QuickPickleHelper.cachepath = import_dirname
+        vol_model = QuickPickleHelper.ReadOrCreateVariable(varname='vol_model', createfunc=nornir_volumemodel.Load_Xml, VolumePath=vol_model)
+        return vol_model
 
     @classmethod
     def Import(cls, vol_model, dataset_name=None):
         '''Given a nornir volume model populate the django model.
         :return volume volume: Volume model'''
-        if(isinstance(vol_model, str)):
-            vol_model = nornir_volumemodel.Load_Xml(vol_model)
+
+        if isinstance(vol_model, str):
+            vol_model = VolumeXMLImporter._LoadVolumeFromCacheIfPossible(vol_model)
 
         importer_obj = VolumeXMLImporter(vol_model)
 
@@ -207,13 +284,16 @@ class VolumeXMLImporter():
         section = channel.Parent
         coord_space_name = models.CoordSpace.SectionChannelName(section.Number, channel.Name, name)
 
-        db_coordspace = GetOrCreateCoordSpace(self.dataset_name, coord_space_name, bounds)
+        (db_coordspace, needsave) = GetOrCreateCoordSpace(self.db_dataset, coord_space_name, bounds)
 
         if db_coordspace.xscale is None or db_coordspace.xscale.value != channel.Scale.X.UnitsPerPixel or db_coordspace.yscale.value != channel.Scale.Y.UnitsPerPixel:
             db_coordspace.xscale = models.Scale(value=channel.Scale.X.UnitsPerPixel, units=channel.Scale.X.UnitsOfMeasure)
             db_coordspace.yscale = models.Scale(value=channel.Scale.Y.UnitsPerPixel, units=channel.Scale.Y.UnitsOfMeasure)
             db_coordspace.zscale = None
 
+            needsave = True
+
+        if needsave:
             db_coordspace.save()
 
         return db_coordspace
@@ -221,24 +301,30 @@ class VolumeXMLImporter():
     def AddChannelMosaic(self, channel, transform_obj, ZLevel):
 
         (db_channel, created) = models.Channel.objects.get_or_create(name=channel.Name)
+        if created:
+            db_channel.save()
 
         mosaicfile = nornir_imageregistration.files.MosaicFile.Load(transform_obj.FullPath)
         if mosaicfile is None:
             return
 
-        mosaic = nornir_imageregistration.mosaic.Mosaic(mosaicfile.ImageToTransformString)
+        mosaic = nornir_imageregistration.mosaic.Mosaic(copy.copy(mosaicfile.ImageToTransformString))
 
         db_bounds = CreateBoundingRect(mosaic.FixedBoundingBox, minZ=ZLevel)
-        db_mosaic_coordspace = GetOrCreateCoordSpace(self.dataset_name, transform_obj.Name, bounds=db_bounds)
+        db_mosaic_coordspace = GetOrCreateCoordSpace(self.db_dataset, transform_obj.Name, bounds=db_bounds, ForceSaveOnCreate=True)
+
+        db_mapping_list = []
+
+        print("Importing mappings from %s" % (transform_obj.FullPath))
 
         for (name, transform) in mosaic.ImageToTransform.items():
 
             (tile_number, ext) = os.path.splitext(name)
             tile_number = int(tile_number)
 
-            db_bounds = ConvertToDBBounds(transform.MappedBoundingBox, ZLevel=ZLevel)
+            db_tile_bounds = ConvertToDBBounds(transform.MappedBoundingBox, ZLevel=ZLevel)
 
-            db_tile_coordspace = self.GetOrCreateTileCoordSpace(channel, 'Tile%d' % tile_number, db_bounds, ZLevel)
+            db_tile_coordspace = self.GetOrCreateTileCoordSpace(channel, 'Tile%d' % tile_number, db_tile_bounds, ZLevel)
 
     #         (db_tile, created) = models.Tile.objects.get_or_create(number=int(tile_number),
     #                                                                name=name,
@@ -251,14 +337,15 @@ class VolumeXMLImporter():
             transform_string = mosaicfile.ImageToTransformString[name]
             db_dest_bounding_box = CreateBoundingRect(transform.FixedBoundingBox, ZLevel)
 
-            (db_mapping, created) = models.Mapping2D.objects.get_or_create(
-                                                             src_coordinate_space=db_tile_coordspace,
-                                                             src_bounding_box=db_tile_coordspace.bounds,
-                                                             transform_string=transform_string,
-                                                             dest_coordinate_space=db_mosaic_coordspace,
-                                                             dest_bounding_box=db_dest_bounding_box)
-            if created:
-                db_mapping.save()
+            db_mapping = models.Mapping2D(src_coordinate_space=db_tile_coordspace,
+                                                     src_bounding_box=db_tile_bounds,
+                                                     transform_string=transform_string,
+                                                     dest_coordinate_space=db_mosaic_coordspace,
+                                                     dest_bounding_box=db_dest_bounding_box)
+
+            db_mapping_list.append(db_mapping)
+
+        models.Mapping2D.objects.bulk_create(db_mapping_list)
 
     def AddTilePyramid(self, channel, filter_name, ZLevel, tile_pyramid):
 
@@ -266,8 +353,12 @@ class VolumeXMLImporter():
             return
 
         (db_channel, created) = models.Channel.objects.get_or_create(name=channel.Name)
-        (db_filter, created) = models.Filter.objects.get_or_create(name=filter_name, channel=db_channel)
+        if created:
+            db_channel.save()
 
+        (db_filter, created) = models.Filter.objects.get_or_create(name=filter_name, channel=db_channel)
+        if created:
+            db_filter.save()
 
 
         for level in tile_pyramid.Levels:
@@ -287,28 +378,41 @@ class VolumeXMLImporter():
     def BulkAddData2D(self, channel, full_path, rel_path, extension, db_channel, db_filter, ZLevel, level_number):
         image_paths = glob.glob(os.path.join(full_path, '*' + extension))
 
+        if len(image_paths) == 0:
+            return
+
+        (height, width) = nornir_imageregistration.GetImageSize(image_paths[0])
+        db_bounds = GetOrCreateBoundingBox((ZLevel, 0, 0, ZLevel, height, width))
+
+        db_data_list = []
+
         for image_path in image_paths:
-            if os.path.exists(image_path):
-                img_name = os.path.basename(image_path)
-                (img_number, ext) = os.path.splitext(img_name)
+            # if os.path.exists(image_path):
+            img_name = os.path.basename(image_path)
+            (img_number, ext) = os.path.splitext(img_name)
 
-                (height, width) = nornir_imageregistration.GetImageSize(image_path)
-                db_bounds = CreateBoundingRect(Rectangle.CreateFromPointAndArea((0, 0), (height, width)), minZ=ZLevel)
-                db_tile_coordspace = self.GetOrCreateTileCoordSpace(channel, 'Tile%d' % int(img_number), bounds=db_bounds)
-                # db_tile_mapping = GetTileMapping(tile_number=img_number, Z=ZLevel, )
+            # (height, width) = nornir_imageregistration.GetImageSize(image_path)
+            # db_bounds = CreateBoundingRect(Rectangle.CreateFromPointAndArea((0, 0), (height, width)), minZ=ZLevel)
+            db_tile_coordspace = self.GetOrCreateTileCoordSpace(channel, 'Tile%d' % int(img_number), bounds=db_bounds)
+            # db_tile_mapping = GetTileMapping(tile_number=img_number, Z=ZLevel, )
 
-                img_rel_path = os.path.join(rel_path, img_name)
+            img_rel_path = os.path.join(rel_path, img_name)
 
-                (db_data, created) = models.Data2D.objects.get_or_create(name=img_name,
-                                                                         image=os.path.abspath(image_path),
-                                                                         filter=db_filter,
-                                                                         level=level_number,
-                                                                         relative_path=img_rel_path,
-                                                                         coord_space=db_tile_coordspace,
-                                                                         width=width,
-                                                                         height=height)
-                if created:
-                    db_data.save()
+            db_data = models.Data2D(name=img_name,
+                             image=os.path.abspath(image_path),
+                             filter=db_filter,
+                             level=level_number,
+                             relative_path=img_rel_path,
+                             coord_space=db_tile_coordspace,
+                             width=width,
+                             height=height)
+
+            db_data_list.append(db_data)
+
+        models.Data2D.objects.bulk_create(db_data_list)
+
+
+#        db_data.save()
 
 
 if __name__ == '__main__':

@@ -6,7 +6,7 @@
     <ProjectGuid>{b11db5d0-46e2-4ebf-803b-263a80e023de}</ProjectGuid>
     <ProjectHome />
     <StartupFile />
-    <SearchPath />
+    <SearchPath>nornir_djangomodel\</SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
     <ProjectTypeGuids>{888888a0-9f3d-457c-b088-3a5042f75d52}</ProjectTypeGuids>
@@ -41,6 +41,18 @@
   </ItemGroup>
   <ItemGroup>
     <InterpreterReference Include="{9a7a9026-48c1-4688-9d5d-e5699d47d074}\3.4" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\nornir-imageregistration\nornir-imageregistration.pyproj">
+      <Name>nornir-imageregistration</Name>
+      <Project>{018901b6-d5a2-41ce-8980-7c24e28d8480}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\nornir-volumemodel\nornir-volumemodel.pyproj">
+      <Name>nornir-volumemodel</Name>
+      <Project>{b1b6a4e4-8ed7-46ed-85a6-9afbcc82a2de}</Project>
+      <Private>True</Private>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(PtvsTargetsFile)" Condition="Exists($(PtvsTargetsFile))" />
   <Import Project="$(MSBuildToolsPath)\Microsoft.Common.targets" Condition="!Exists($(PtvsTargetsFile))" />
