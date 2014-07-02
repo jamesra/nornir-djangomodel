@@ -23,6 +23,18 @@ class ImportVolumeXMLTestCase(test.test_base.PlatformTest):
 
         self.VolumeXMLFullPath = os.path.join(self.ImportedDataPath, 'VolumeData.xml')
 
+class ImportSubVolume(ImportVolumeXMLTestCase):
+
+    def test_import_volumexml(self):
+        import_xml.VolumeXMLImporter.Import(self.VolumeXMLFullPath, section_list=[691])
+
+        # Print the volumes in the DB
+        vlist = models.Dataset.objects.all()
+        self.assertEqual(len(vlist), 1, "Only one volume expected")
+        self.assertEqual(vlist[0].path, self.ImportedDataPath)
+
+class ImportFullVolume(ImportVolumeXMLTestCase):
+
     def test_import_volumexml(self):
         import_xml.VolumeXMLImporter.Import(self.VolumeXMLFullPath)
 
@@ -30,6 +42,9 @@ class ImportVolumeXMLTestCase(test.test_base.PlatformTest):
         vlist = models.Dataset.objects.all()
         self.assertEqual(len(vlist), 1, "Only one volume expected")
         self.assertEqual(vlist[0].path, self.ImportedDataPath)
+
+
+
 #
 #         clist = models.Channel.objects.all()
 #         print("\nChannels:")

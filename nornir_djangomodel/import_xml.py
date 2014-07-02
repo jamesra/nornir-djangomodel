@@ -245,8 +245,8 @@ class VolumeXMLImporter():
         GetOrCreateDataset(dataset_name, Path=vol_model.Path)
 
         importer_obj.AddChannelsAndFilters()
-        importer_obj.AddTiles()
-        importer_obj.AddChannelTransforms()
+        importer_obj.AddTiles(section_list)
+        importer_obj.AddChannelTransforms(section_list)
 
         return dataset_name
 
