@@ -9,6 +9,8 @@ import logging
 import os
 import shutil
 import django.test
+import cProfile
+import pstats
 
 from nornir_shared.misc import SetupLogging
 
@@ -21,6 +23,10 @@ class TestBase(django.test.TestCase):
     @property
     def classname(self):
         return str(self.__class__.__name__)
+
+    @property
+    def TestProfilerOutputPath(self):
+        return os.path.join(self.TestOutputPath, self.classname + '.profile')
 
     @property
     def TestInputPath(self):
@@ -71,6 +77,8 @@ class TestBase(django.test.TestCase):
 
         super(TestBase, self).setUp()
 
+        self.profiler = cProfile.Profile()
+        self.profiler.enable()
 
         self.TestDataPath = self.TestInputPath
 
@@ -82,6 +90,13 @@ class TestBase(django.test.TestCase):
 
         SetupLogging(self.TestLogPath)
         self.Logger = logging.getLogger(self.classname)
+
+    def tearDown(self):
+
+        self.profiler.dump_stats(self.TestProfilerOutputPath)
+
+        django.test.TestCase.tearDown(self)
+
 
 
 class PlatformTest(TestBase):
