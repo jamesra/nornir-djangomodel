@@ -230,7 +230,7 @@ class VolumeXMLImporter():
         return vol_model
 
     @classmethod
-    def Import(cls, vol_model, dataset_name=None):
+    def Import(cls, vol_model, dataset_name=None, section_list=None):
         '''Given a nornir volume model populate the django model.
         :return volume volume: Volume model'''
 
@@ -265,19 +265,21 @@ class VolumeXMLImporter():
 
         return
 
-    def AddTiles(self):
+    def AddTiles(self, section_list=None):
         for (filter_obj, parent_dict) in _iterate_volume_filters(self.volumexml_model):
             channel_obj = parent_dict['channel']
             ZLevel = parent_dict['section'].Number
-            self.AddTilePyramid(channel_obj, filter_obj.Name, ZLevel, filter_obj.TilePyramid)
+            if section_list is None or ZLevel in section_list:
+                self.AddTilePyramid(channel_obj, filter_obj.Name, ZLevel, filter_obj.TilePyramid)
 
-    def AddChannelTransforms(self):
+    def AddChannelTransforms(self, section_list=None):
         for (channel_obj, parent_dict) in _iterate_volume_channels(self.volumexml_model):
             for transform_obj in channel_obj.Transforms.values():
                 (base, ext) = os.path.splitext(transform_obj.Path)
                 if ext == '.mosaic':
                     ZLevel = parent_dict['section'].Number
-                    self.AddChannelMosaic(channel_obj, transform_obj, ZLevel)
+                    if section_list is None or ZLevel in section_list:
+                        self.AddChannelMosaic(channel_obj, transform_obj, ZLevel)
 
     def GetOrCreateTileCoordSpace(self, channel, name, bounds, scale=None):
 
@@ -364,7 +366,7 @@ class VolumeXMLImporter():
         for level in tile_pyramid.Levels:
             level_number = level.Number
 
-            print("Adding %s.%s.%d" % (channel.Name, filter_name, level.Number))
+            print("Adding %d.%s.%s.%d" % (ZLevel, channel.Name, filter_name, level.Number))
 
             self.BulkAddData2D(channel,
                           level.FullPath,
@@ -384,7 +386,9 @@ class VolumeXMLImporter():
         (height, width) = nornir_imageregistration.GetImageSize(image_paths[0])
         db_bounds = GetOrCreateBoundingBox((ZLevel, 0, 0, ZLevel, height, width))
 
+
         db_data_list = []
+        img_rel_path_table = {}
 
         for image_path in image_paths:
             # if os.path.exists(image_path):
@@ -394,9 +398,16 @@ class VolumeXMLImporter():
             # (height, width) = nornir_imageregistration.GetImageSize(image_path)
             # db_bounds = CreateBoundingRect(Rectangle.CreateFromPointAndArea((0, 0), (height, width)), minZ=ZLevel)
             db_tile_coordspace = self.GetOrCreateTileCoordSpace(channel, 'Tile%d' % int(img_number), bounds=db_bounds)
+
             # db_tile_mapping = GetTileMapping(tile_number=img_number, Z=ZLevel, )
 
             img_rel_path = os.path.join(rel_path, img_name)
+
+            if img_rel_path in img_rel_path_table:
+                print("Trying to create this tile twice: %s" % (img_rel_path))
+                continue
+
+            img_rel_path_table[img_rel_path] = True
 
             db_data = models.Data2D(name=img_name,
                              image=os.path.abspath(image_path),
@@ -410,7 +421,6 @@ class VolumeXMLImporter():
             db_data_list.append(db_data)
 
         models.Data2D.objects.bulk_create(db_data_list)
-
 
 #        db_data.save()
 
