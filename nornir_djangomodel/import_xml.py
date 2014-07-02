@@ -68,7 +68,7 @@ def GetOrCreateDataset(Name, Path):
         return db_vol
 
 
-def CreateBoundingRect(rect_bounds, minZ, maxZ=None):
+def CreateBoundingRect(rect_bounds, minZ, maxZ=None, Save=True):
     '''
     :param rect bounds: (minY minX MaxY maxX)
     :param float minZ: Z level of bounding rect
@@ -78,27 +78,32 @@ def CreateBoundingRect(rect_bounds, minZ, maxZ=None):
     if maxZ is None:
         maxZ = minZ
 
-    db_boundingbox = models.BoundingBox.objects.create(minX=rect_bounds[iRect.MinX],
+    db_boundingbox = models.BoundingBox(minX=rect_bounds[iRect.MinX],
                                                        minY=rect_bounds[iRect.MinY],
                                                        minZ=minZ,
                                                        maxX=rect_bounds[iRect.MaxX],
                                                        maxY=rect_bounds[iRect.MaxY],
                                                        maxZ=maxZ)
-    db_boundingbox.save()
+    if Save:
+        db_boundingbox.save()
+
     return db_boundingbox
 
 
-def CreateBoundingBox(bounds):
+def CreateBoundingBox(bounds, Save=True):
     '''
     :param rect bounds: (minZ minY minX MaxZ MaxY maxX)
     '''
-    db_boundingbox = models.BoundingBox.objects.create(minX=bounds[iBox.MinX],
+    db_boundingbox = models.BoundingBox(minX=bounds[iBox.MinX],
                                                        minY=bounds[iBox.MinY],
                                                        minZ=bounds[iBox.MinZ],
                                                        maxX=bounds[iBox.MaxX],
                                                        maxY=bounds[iBox.MaxY],
                                                        maxZ=bounds[iBox.MaxZ])
-    db_boundingbox.save()
+
+    if Save:
+        db_boundingbox.save()
+
     return db_boundingbox
 
 def GetOrCreateBoundingBox(bounds):
@@ -300,6 +305,20 @@ class VolumeXMLImporter():
 
         return db_coordspace
 
+    @classmethod
+    def BatchCreateDestinationBoundingRects(cls, ImageToTransform, ZLevel):
+        ImageToBounds = {}
+        dbBounds_list = []
+
+        for (name, transform) in ImageToTransform.items():
+            db_dest_bounding_box = CreateBoundingRect(transform.FixedBoundingBox, ZLevel, Save=False)
+            dbBounds_list.append(db_dest_bounding_box)
+            ImageToBounds[name] = db_dest_bounding_box
+
+        models.BoundingBox.objects.bulk_create(dbBounds_list)
+        return ImageToBounds
+
+
     def AddChannelMosaic(self, channel, transform_obj, ZLevel):
 
         (db_channel, created) = models.Channel.objects.get_or_create(name=channel.Name)
@@ -319,6 +338,10 @@ class VolumeXMLImporter():
 
         print("Importing mappings from %s" % (transform_obj.FullPath))
 
+        # Batch create destination bounding rectangles for each transform
+
+        ImageToBounds = VolumeXMLImporter.BatchCreateDestinationBoundingRects(mosaic.ImageToTransform, ZLevel)
+
         for (name, transform) in mosaic.ImageToTransform.items():
 
             (tile_number, ext) = os.path.splitext(name)
@@ -337,7 +360,7 @@ class VolumeXMLImporter():
 
             # transform_string = nornir_imageregistration.transforms.factory.TransformToIRToolsString(transform)
             transform_string = mosaicfile.ImageToTransformString[name]
-            db_dest_bounding_box = CreateBoundingRect(transform.FixedBoundingBox, ZLevel)
+            db_dest_bounding_box = ImageToBounds[name]  # CreateBoundingRect(transform.FixedBoundingBox, ZLevel)
 
             db_mapping = models.Mapping2D(src_coordinate_space=db_tile_coordspace,
                                                      src_bounding_box=db_tile_bounds,
@@ -361,7 +384,6 @@ class VolumeXMLImporter():
         (db_filter, created) = models.Filter.objects.get_or_create(name=filter_name, channel=db_channel)
         if created:
             db_filter.save()
-
 
         for level in tile_pyramid.Levels:
             level_number = level.Number
