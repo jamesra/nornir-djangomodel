@@ -90,6 +90,28 @@ def CreateBoundingRect(rect_bounds, minZ, maxZ=None, Save=True):
     return db_boundingbox
 
 
+
+def GetOrCreateBoundingRect(rect_bounds, minZ, maxZ=None, Save=True):
+    '''
+    :param rect bounds: (minZ minY minX MaxZ MaxY maxX)
+    '''
+
+    if maxZ is None:
+        maxZ = minZ
+
+    (db_boundingbox, created) = models.BoundingBox.objects.get_or_create(minX=rect_bounds[iRect.MinX],
+                                                                           minY=rect_bounds[iRect.MinY],
+                                                                           minZ=minZ,
+                                                                           maxX=rect_bounds[iRect.MaxX],
+                                                                           maxY=rect_bounds[iRect.MaxY],
+                                                                           maxZ=maxZ)
+
+    if created and Save:
+        db_boundingbox.save()
+
+    return db_boundingbox
+
+
 def CreateBoundingBox(bounds, Save=True):
     '''
     :param rect bounds: (minZ minY minX MaxZ MaxY maxX)
@@ -119,6 +141,7 @@ def GetOrCreateBoundingBox(bounds):
 
     if created:
         db_boundingbox.save()
+
     return db_boundingbox
 
 
@@ -240,7 +263,9 @@ class VolumeXMLImporter():
         :return volume volume: Volume model'''
 
         if isinstance(vol_model, str):
+            path_str = vol_model
             vol_model = VolumeXMLImporter._LoadVolumeFromCacheIfPossible(vol_model)
+            vol_model.Path = os.path.dirname(path_str)
 
         importer_obj = VolumeXMLImporter(vol_model)
 
@@ -315,6 +340,7 @@ class VolumeXMLImporter():
             dbBounds_list.append(db_dest_bounding_box)
             ImageToBounds[name] = db_dest_bounding_box
 
+        # This doesn't update the ids of the DB bounds, so they can't be used for other purposes
         models.BoundingBox.objects.bulk_create(dbBounds_list)
         return ImageToBounds
 
@@ -340,16 +366,19 @@ class VolumeXMLImporter():
 
         # Batch create destination bounding rectangles for each transform
 
-        ImageToBounds = VolumeXMLImporter.BatchCreateDestinationBoundingRects(mosaic.ImageToTransform, ZLevel)
+        # ImageToDestinationBounds = VolumeXMLImporter.BatchCreateDestinationBoundingRects(mosaic.ImageToTransform, ZLevel)
+
+        db_src_tile_bounds = None
 
         for (name, transform) in mosaic.ImageToTransform.items():
 
             (tile_number, ext) = os.path.splitext(name)
             tile_number = int(tile_number)
 
-            db_tile_bounds = ConvertToDBBounds(transform.MappedBoundingBox, ZLevel=ZLevel)
+            if db_src_tile_bounds is None:
+                db_src_tile_bounds = CreateBoundingRect(transform.MappedBoundingBox, minZ=ZLevel)
 
-            db_tile_coordspace = self.GetOrCreateTileCoordSpace(channel, 'Tile%d' % tile_number, db_tile_bounds, ZLevel)
+            db_tile_coordspace = self.GetOrCreateTileCoordSpace(channel, 'Tile%d' % tile_number, db_src_tile_bounds, ZLevel)
 
     #         (db_tile, created) = models.Tile.objects.get_or_create(number=int(tile_number),
     #                                                                name=name,
@@ -360,10 +389,11 @@ class VolumeXMLImporter():
 
             # transform_string = nornir_imageregistration.transforms.factory.TransformToIRToolsString(transform)
             transform_string = mosaicfile.ImageToTransformString[name]
-            db_dest_bounding_box = ImageToBounds[name]  # CreateBoundingRect(transform.FixedBoundingBox, ZLevel)
-
+            # db_dest_bounding_box = ImageToDestinationBounds[name]
+            db_dest_bounding_box = CreateBoundingRect(transform.FixedBoundingBox, ZLevel)
+            assert(db_dest_bounding_box is not None)
             db_mapping = models.Mapping2D(src_coordinate_space=db_tile_coordspace,
-                                                     src_bounding_box=db_tile_bounds,
+                                                     src_bounding_box=db_src_tile_bounds,
                                                      transform_string=transform_string,
                                                      dest_coordinate_space=db_mosaic_coordspace,
                                                      dest_bounding_box=db_dest_bounding_box)
@@ -406,8 +436,7 @@ class VolumeXMLImporter():
             return
 
         (height, width) = nornir_imageregistration.GetImageSize(image_paths[0])
-        db_bounds = GetOrCreateBoundingBox((ZLevel, 0, 0, ZLevel, height, width))
-
+        db_bounds = CreateBoundingBox((ZLevel, 0, 0, ZLevel, height, width))
 
         db_data_list = []
         img_rel_path_table = {}
