@@ -48,6 +48,9 @@ class BoundingBox(models.Model):
                                                             self.maxY,
                                                             self.maxX)
 
+    # class Meta:
+    #    unique_together = (("minX", "minY", "minZ", "maxZ", "maxY", "maxX"),)
+
 class Dataset(models.Model):
     '''A collection of data and coordinate spaces which are part of the same experiment or dataset.'''
     name = models.CharField("Name", max_length=256, primary_key=True)
@@ -249,9 +252,9 @@ class Data2D(models.Model):
 class Mapping2D(models.Model):
     transform_string = models.TextField("Transform string")
     dest_coordinate_space = models.ForeignKey(CoordSpace, related_name="incoming_mappings")
-    dest_bounding_box = models.ForeignKey(BoundingBox, related_name="incoming_mappings_bounding_boxes", help_text="Bounding box for this mapping's control points in the destination coordinate space", null=True)
+    dest_bounding_box = models.ForeignKey(BoundingBox, related_name="incoming_mappings_bounding_boxes", help_text="Bounding box for this mapping's control points in the destination coordinate space")
     src_coordinate_space = models.ForeignKey(CoordSpace, related_name="outgoing_mappings")
-    src_bounding_box = models.ForeignKey(BoundingBox, related_name="outgoing_mappings_bounding_boxes", help_text="Bounding box for this mapping's control points in the source coordinate space", null=True)
+    src_bounding_box = models.ForeignKey(BoundingBox, related_name="outgoing_mappings_bounding_boxes", help_text="Bounding box for this mapping's control points in the source coordinate space")
 
     @property
     def Z(self):
