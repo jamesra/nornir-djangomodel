@@ -32,7 +32,7 @@ if __name__ == '__main__':
     classifiers = ['Programming Language :: Python :: 3.4',
                    'Topic :: Scientific/Engineering']
 
-    setup(name='nornir_web',
+    setup(name='nornir_djangomodel',
           classifiers=classifiers,
           version='1.2.0',
           description="Django web model for Nornir",
