@@ -8,13 +8,13 @@ from django.db import models
 ######################################
 
 class BoundingBox(models.Model):
-    minX = models.FloatField()
-    minY = models.FloatField()
-    minZ = models.FloatField()
+    minX = models.FloatField(db_index=True)
+    minY = models.FloatField(db_index=True)
+    minZ = models.FloatField(db_index=True)
 
-    maxX = models.FloatField()
-    maxY = models.FloatField()
-    maxZ = models.FloatField()
+    maxX = models.FloatField(db_index=True)
+    maxY = models.FloatField(db_index=True)
+    maxZ = models.FloatField(db_index=True)
 
     @property
     def ndims(self):
