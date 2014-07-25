@@ -207,6 +207,30 @@ class CoordSpace(ScaleBase):
 
     def __str__(self):
         return self.name
+    
+    def UpdateAllBoundaries(self):     
+        '''Update our bounds to ensure it includes the contribution of all mappings'''  
+        for mapping in self.incoming_mappings.select_related('dest_bounding_box'):
+            self.UpdateBounds(mapping.dest_bounding_box)
+    
+    def UpdateBounds(self, db_bounding_box):
+        '''Update our bounds to include the provided bounding box'''
+    
+        if self.bounds.minX > db_bounding_box.minX:
+            self.bounds.minX = db_bounding_box.minX
+        if self.bounds.minY > db_bounding_box.minY:
+            self.bounds.minY = db_bounding_box.minY
+        if self.bounds.minZ > db_bounding_box.minZ:
+            self.bounds.minZ = db_bounding_box.minZ
+        
+        if self.bounds.maxX < db_bounding_box.maxX:
+            self.bounds.maxX = db_bounding_box.maxX
+        if self.bounds.maxY < db_bounding_box.maxY:
+            self.bounds.maxY = db_bounding_box.maxY
+        if self.bounds.maxZ < db_bounding_box.maxZ:
+            self.bounds.maxZ = db_bounding_box.maxZ
+
+            
 
 #
 # # TODO: Does Tile add any value?  Can it be removed?

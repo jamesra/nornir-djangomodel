@@ -186,8 +186,7 @@ def GetOrCreateCoordSpace(db_dataset, coord_space_name, bounds, ForceSaveOnCreat
     db_bounds = ConvertToDBBounds(bounds)
     # db_dataset = models.Dataset.objects.get(name=db_dataset_name)
 
-    (db_coordspace, created) = models.CoordSpace.objects.get_or_create(name=coord_space_name,
-                                                                       dataset=db_dataset)
+    (db_coordspace, created) = models.CoordSpace.objects.get_or_create(name=coord_space_name, dataset=db_dataset)
 
     need_save = created
     if not db_bounds is None:
@@ -399,8 +398,16 @@ class VolumeXMLImporter():
                                                      dest_bounding_box=db_dest_bounding_box)
 
             db_mapping_list.append(db_mapping)
+            
+            db_mosaic_coordspace.UpdateBounds(db_dest_bounding_box)
 
         models.Mapping2D.objects.bulk_create(db_mapping_list)
+        
+        #Save the updated coordspace bounding box
+        db_mosaic_coordspace.bounds.save()
+        
+     
+    
 
     def AddTilePyramid(self, channel, filter_name, ZLevel, tile_pyramid):
 
