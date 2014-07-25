@@ -209,26 +209,44 @@ class CoordSpace(ScaleBase):
         return self.name
     
     def UpdateAllBoundaries(self):     
-        '''Update our bounds to ensure it includes the contribution of all mappings'''  
+        '''Update our bounds to ensure it includes the contribution of all mappings
+        :return: True if updated, False if not updated, None if coord_space contains no mappings'''  
+        updated = None
         for mapping in self.incoming_mappings.select_related('dest_bounding_box'):
-            self.UpdateBounds(mapping.dest_bounding_box)
+            updated = self.UpdateBounds(mapping.dest_bounding_box)
+            
+            if updated:
+                self.save()
+                
+        return updated
+                
     
     def UpdateBounds(self, db_bounding_box):
         '''Update our bounds to include the provided bounding box'''
+        
+        updated = False
     
         if self.bounds.minX > db_bounding_box.minX:
             self.bounds.minX = db_bounding_box.minX
+            updated = True
         if self.bounds.minY > db_bounding_box.minY:
             self.bounds.minY = db_bounding_box.minY
+            updated = True
         if self.bounds.minZ > db_bounding_box.minZ:
             self.bounds.minZ = db_bounding_box.minZ
+            updated = True
         
         if self.bounds.maxX < db_bounding_box.maxX:
             self.bounds.maxX = db_bounding_box.maxX
+            updated = True
         if self.bounds.maxY < db_bounding_box.maxY:
             self.bounds.maxY = db_bounding_box.maxY
+            updated = True
         if self.bounds.maxZ < db_bounding_box.maxZ:
             self.bounds.maxZ = db_bounding_box.maxZ
+            updated = True
+            
+        return updated
 
             
 
