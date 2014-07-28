@@ -212,11 +212,12 @@ class CoordSpace(ScaleBase):
         '''Update our bounds to ensure it includes the contribution of all mappings
         :return: True if updated, False if not updated, None if coord_space contains no mappings'''  
         updated = None
-        for mapping in self.incoming_mappings.select_related('dest_bounding_box'):
-            updated = self.UpdateBounds(mapping.dest_bounding_box)
+        for mapping in self.incoming_mappings.select_related('dest_bounding_box').iterator():
+            if self.UpdateBounds(mapping.dest_bounding_box):
+                updated = True
             
-            if updated:
-                self.save()
+        if updated: 
+            self.bounds.save()
                 
         return updated
                 
