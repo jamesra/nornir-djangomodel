@@ -4,10 +4,15 @@ Created on Jun 10, 2014
 @author: u0490822
 '''
 from django.db import models
+from . import  custom_query_manager
 
 ######################################
 
 class BoundingBox(models.Model):
+    
+    def get_query_set(self):
+        return custom_query_manager.NoCountManager()
+    
     minX = models.FloatField(db_index=True)
     minY = models.FloatField(db_index=True)
     minZ = models.FloatField(db_index=True)
@@ -52,6 +57,9 @@ class BoundingBox(models.Model):
     #    unique_together = (("minX", "minY", "minZ", "maxZ", "maxY", "maxX"),)
 
 class Dataset(models.Model):
+    def get_query_set(self):
+        return custom_query_manager.NoCountManager()
+    
     '''A collection of data and coordinate spaces which are part of the same experiment or dataset.'''
     name = models.CharField("Name", max_length=256, primary_key=True)
     path = models.FilePathField("Dataset root", unique=True)
@@ -192,7 +200,9 @@ class ScaleBase(models.Model):
 
 class CoordSpace(ScaleBase):
     '''A coordinate space'''
-
+    def get_query_set(self):
+            return custom_query_manager.NoCountManager()
+        
     name = models.CharField("Name", max_length=128, primary_key=True)
     dataset = models.ForeignKey("Dataset", related_name="coord_spaces", related_query_name="coord_space")
     bounds = models.ForeignKey(BoundingBox, null=True, help_text="Bounding box of known points in the space")
@@ -271,6 +281,10 @@ class CoordSpace(ScaleBase):
 
 class Data2D(models.Model):
     '''Data for a coordinate space'''
+    
+    def get_query_set(self):
+        return custom_query_manager.NoCountManager()
+    
     name = models.CharField(max_length=64)
     relative_path = models.FilePathField("Image file", primary_key=True)
     image = models.FilePathField()
@@ -293,6 +307,10 @@ class Data2D(models.Model):
 
 
 class Mapping2D(models.Model):
+    
+    def get_query_set(self):
+        return custom_query_manager.NoCountManager()
+    
     transform_string = models.TextField("Transform string")
     dest_coordinate_space = models.ForeignKey(CoordSpace, related_name="incoming_mappings")
     dest_bounding_box = models.ForeignKey(BoundingBox, related_name="incoming_mappings_bounding_boxes", help_text="Bounding box for this mapping's control points in the destination coordinate space")
