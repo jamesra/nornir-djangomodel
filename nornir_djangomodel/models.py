@@ -61,7 +61,7 @@ class Dataset(models.Model):
         return custom_query_manager.NoCountManager()
     
     '''A collection of data and coordinate spaces which are part of the same experiment or dataset.'''
-    name = models.CharField("Name", max_length=256, primary_key=True)
+    name = models.CharField("Name", max_length=64, primary_key=True)
     path = models.FilePathField("Dataset root", unique=True)
 
     def __str__(self):
@@ -69,7 +69,7 @@ class Dataset(models.Model):
 
 
 class Channel(models.Model):
-    name = models.CharField("Name", max_length=256, primary_key=True)
+    name = models.CharField("Name", max_length=64, primary_key=True)
     dataset = models.ForeignKey("Dataset", related_name="channels", related_query_name="channel")
 
     def __str__(self):
@@ -78,7 +78,7 @@ class Channel(models.Model):
 
 class Filter(models.Model):
     '''A version of a channel with the same coordinate space, but different intensity mappings for data'''
-    name = models.CharField("Name", max_length=256)
+    name = models.CharField("Name", max_length=64)
     channel = models.ForeignKey("Channel")
 
     class Meta:
@@ -287,7 +287,7 @@ class Data2D(models.Model):
     
     name = models.CharField(max_length=64)
     relative_path = models.FilePathField("Image file", primary_key=True)
-    image = models.FilePathField()
+    image = models.TextField()
     level = models.PositiveIntegerField()
     filter = models.ForeignKey(Filter)
     coord_space = models.ForeignKey(CoordSpace)
