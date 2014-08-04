@@ -222,6 +222,9 @@ class CoordSpace(ScaleBase):
         '''Update our bounds to ensure it includes the contribution of all mappings
         :return: True if updated, False if not updated, None if coord_space contains no mappings'''  
         updated = None
+        
+        #TODO: Shrink the bounding box if needed
+        
         for mapping in self.incoming_mappings.select_related('dest_bounding_box').iterator():
             if self.UpdateBounds(mapping.dest_bounding_box):
                 updated = True
@@ -310,8 +313,9 @@ class Mapping2D(models.Model):
     
     def get_query_set(self):
         return custom_query_manager.NoCountManager()
-    
-    transform_string = models.TextField("Transform string")
+
+        
+    transform_string = models.TextField("Transform string") 
     dest_coordinate_space = models.ForeignKey(CoordSpace, related_name="incoming_mappings")
     dest_bounding_box = models.ForeignKey(BoundingBox, related_name="incoming_mappings_bounding_boxes", help_text="Bounding box for this mapping's control points in the destination coordinate space")
     src_coordinate_space = models.ForeignKey(CoordSpace, related_name="outgoing_mappings")
@@ -320,6 +324,9 @@ class Mapping2D(models.Model):
     @property
     def Z(self):
         return self.dest_bounding_box.minZ
+    
+    class Meta:
+        unique_together = (("src_coordinate_space", "dest_coordinate_space"),)
 
     def __str__(self):
         return self.src_coordinate_space.name + " -> " + self.dest_coordinate_space.name

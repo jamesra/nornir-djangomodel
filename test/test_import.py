@@ -28,6 +28,8 @@ class ImportSubVolume(ImportVolumeXMLTestCase):
     def test_import_volumexml_in_stages(self):
         import_xml.VolumeXMLImporter.Import(self.VolumeXMLFullPath, section_list=[691])
         import_xml.VolumeXMLImporter.Import(self.VolumeXMLFullPath, section_list=[692])
+        
+        #Reimport a section and ensure it completes without errors
         import_xml.VolumeXMLImporter.Import(self.VolumeXMLFullPath, section_list=[691])
 
         # Print the volumes in the DB

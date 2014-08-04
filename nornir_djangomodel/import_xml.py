@@ -392,13 +392,25 @@ class VolumeXMLImporter():
             # db_dest_bounding_box = ImageToDestinationBounds[name]
             db_dest_bounding_box = CreateBoundingRect(transform.FixedBoundingBox, ZLevel)
             assert(db_dest_bounding_box is not None)
-            db_mapping = models.Mapping2D(src_coordinate_space=db_tile_coordspace,
+            
+            existing_db_mapping = models.Mapping2D.objects.filter(src_coordinate_space=db_tile_coordspace,
+                                                                  dest_coordinate_space=db_mosaic_coordspace) 
+            if existing_db_mapping.exists():
+                db_mapping = existing_db_mapping.first()
+                db_mapping.transform_string = transform_string
+                db_mapping.src_bounding_box = db_src_tile_bounds
+                db_mapping.dest_bounding_box = db_dest_bounding_box
+                
+                db_mapping.save()
+
+            else:
+                db_mapping = models.Mapping2D(src_coordinate_space=db_tile_coordspace,
                                                      src_bounding_box=db_src_tile_bounds,
                                                      transform_string=transform_string,
                                                      dest_coordinate_space=db_mosaic_coordspace,
                                                      dest_bounding_box=db_dest_bounding_box)
 
-            db_mapping_list.append(db_mapping)
+                db_mapping_list.append(db_mapping)
             
             db_mosaic_coordspace.UpdateBounds(db_dest_bounding_box)
 
