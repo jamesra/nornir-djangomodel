@@ -201,7 +201,7 @@ def GetOrCreateCoordSpace(db_dataset, coord_space_name, bounds, ForceSaveOnCreat
 
         return db_coordspace
 
-    return (db_coordspace, need_save)
+    return (db_coordspace, created)
 
 
 def _iterate_volume_channels(volumexml_model):
@@ -314,8 +314,9 @@ class VolumeXMLImporter():
 
         section = channel.Parent
         coord_space_name = models.CoordSpace.SectionChannelName(section.Number, channel.Name, name)
-
-        (db_coordspace, needsave) = GetOrCreateCoordSpace(self.db_dataset, coord_space_name, bounds)
+        needsave = False 
+        
+        (db_coordspace, created) = GetOrCreateCoordSpace(self.db_dataset, coord_space_name, bounds)
 
         if db_coordspace.xscale is None or db_coordspace.xscale.value != channel.Scale.X.UnitsPerPixel or db_coordspace.yscale.value != channel.Scale.Y.UnitsPerPixel:
             db_coordspace.xscale = models.Scale(value=channel.Scale.X.UnitsPerPixel, units=channel.Scale.X.UnitsOfMeasure)
@@ -324,10 +325,10 @@ class VolumeXMLImporter():
 
             needsave = True
 
-        if needsave:
+        if needsave or created:
             db_coordspace.save()
 
-        return db_coordspace
+        return (db_coordspace, created)
 
     @classmethod
     def BatchCreateDestinationBoundingRects(cls, ImageToTransform, ZLevel):
@@ -377,7 +378,7 @@ class VolumeXMLImporter():
             if db_src_tile_bounds is None:
                 db_src_tile_bounds = CreateBoundingRect(transform.MappedBoundingBox, minZ=ZLevel)
 
-            db_tile_coordspace = self.GetOrCreateTileCoordSpace(channel, 'Tile%d' % tile_number, db_src_tile_bounds, ZLevel)
+            (db_tile_coordspace, created_tile_coordspace) = self.GetOrCreateTileCoordSpace(channel, 'Tile%d' % tile_number, db_src_tile_bounds, ZLevel)
 
     #         (db_tile, created) = models.Tile.objects.get_or_create(number=int(tile_number),
     #                                                                name=name,
@@ -455,7 +456,7 @@ class VolumeXMLImporter():
 
             # (height, width) = nornir_imageregistration.GetImageSize(image_path)
             # db_bounds = CreateBoundingRect(Rectangle.CreateFromPointAndArea((0, 0), (height, width)), minZ=ZLevel)
-            db_tile_coordspace = self.GetOrCreateTileCoordSpace(channel, 'Tile%d' % int(img_number), bounds=db_bounds)
+            (db_tile_coordspace, created_tile_coordspace) = self.GetOrCreateTileCoordSpace(channel, 'Tile%d' % int(img_number), bounds=db_bounds)
 
             # db_tile_mapping = GetTileMapping(tile_number=img_number, Z=ZLevel, )
 
@@ -466,8 +467,23 @@ class VolumeXMLImporter():
                 continue
 
             img_rel_path_table[img_rel_path] = True
-
-            db_data = models.Data2D(name=img_name,
+            
+            existing_db_data = models.Data2D.objects.filter(relative_path=img_rel_path) 
+            if existing_db_data.exists():
+                #Update path
+                db_data = existing_db_data.first()
+                db_data.image = os.path.abspath(image_path)
+                db_data.filter = db_filter
+                db_data.level = level_number
+                db_data.coord_space = db_tile_coordspace
+                db_data.width = width
+                db_data.height = height
+                
+                db_data.save()
+                
+            else:
+                #Create new, bulk update path
+                db_data = models.Data2D(name=img_name,
                              image=os.path.abspath(image_path),
                              filter=db_filter,
                              level=level_number,
@@ -476,9 +492,10 @@ class VolumeXMLImporter():
                              width=width,
                              height=height)
 
-            db_data_list.append(db_data)
+                db_data_list.append(db_data)
 
-        models.Data2D.objects.bulk_create(db_data_list)
+        if len(db_data_list) > 0:
+            models.Data2D.objects.bulk_create(db_data_list)
 
 #        db_data.save()
 
