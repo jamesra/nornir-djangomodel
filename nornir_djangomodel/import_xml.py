@@ -14,6 +14,8 @@ import glob
 from . import models
 import pickle
 
+from django.conf import settings
+
 
 class QuickPickleHelper():
     cachepath = os.curdir
@@ -183,8 +185,7 @@ def GetOrCreateCoordSpace(db_dataset, coord_space_name, bounds, ForceSaveOnCreat
     :return: section#.channel.name
     '''
 
-    db_bounds = ConvertToDBBounds(bounds)
-    # db_dataset = models.Dataset.objects.get(name=db_dataset_name)
+    db_bounds = ConvertToDBBounds(bounds) 
 
     (db_coordspace, created) = models.CoordSpace.objects.get_or_create(name=coord_space_name, dataset=db_dataset)
 
@@ -263,7 +264,12 @@ class VolumeXMLImporter():
 
         if isinstance(vol_model, str):
             path_str = vol_model
-            vol_model = VolumeXMLImporter._LoadVolumeFromCacheIfPossible(vol_model)
+            
+            if settings.NORNIR_DJANGOMODEL_USEVOLUMEXMLCACHE:
+                vol_model = VolumeXMLImporter._LoadVolumeFromCacheIfPossible(vol_model)
+            else:
+                vol_model = nornir_volumemodel.Load_Xml(vol_model)
+                
             vol_model.Path = os.path.dirname(path_str)
 
         importer_obj = VolumeXMLImporter(vol_model)
@@ -275,7 +281,7 @@ class VolumeXMLImporter():
 
         importer_obj.AddChannelsAndFilters()
         importer_obj.AddTiles(section_list)
-        importer_obj.AddChannelTransforms(section_list)
+        importer_obj.AddChannelDetails(section_list)
 
         return dataset_name
 
@@ -301,15 +307,29 @@ class VolumeXMLImporter():
             if section_list is None or ZLevel in section_list:
                 self.AddTilePyramid(channel_obj, filter_obj.Name, ZLevel, filter_obj.TilePyramid)
 
-    def AddChannelTransforms(self, section_list=None):
+    def AddChannelDetails(self, section_list=None):
         for (channel_obj, parent_dict) in _iterate_volume_channels(self.volumexml_model):
-            for transform_obj in channel_obj.Transforms.values():
-                (base, ext) = os.path.splitext(transform_obj.Path)
-                if ext == '.mosaic':
-                    ZLevel = parent_dict['section'].Number
-                    if section_list is None or ZLevel in section_list:
+            ZLevel = parent_dict['section'].Number
+            if section_list is None or ZLevel in section_list:    
+                for transform_obj in channel_obj.Transforms.values():
+                    (base, ext) = os.path.splitext(transform_obj.Path)
+                    if ext == '.mosaic': 
                         self.AddChannelMosaic(channel_obj, transform_obj, ZLevel)
-
+            
+        #Transforms sometimes live in different sections than the filters they create, such as Registered_* filters.  Run this as a second loop to 
+        #ensure all the coord_space rows have been created 
+        #=======================================================================
+        # for (channel_obj, parent_dict) in _iterate_volume_channels(self.volumexml_model):
+        #     ZLevel = parent_dict['section'].Number
+        #     if section_list is None or ZLevel in section_list:           
+        #         for filter_obj in channel_obj.Filters.values():
+        #             if filter_obj.ImageSet is None:
+        #                 continue 
+        #             
+        #             self.AddOrUpdateFilterImageSet(channel_obj, filter_obj, filter_obj.ImageSet, ZLevel) 
+        #=======================================================================
+               
+         
     def GetOrCreateTileCoordSpace(self, channel, name, bounds, scale=None):
 
         section = channel.Parent
@@ -343,10 +363,37 @@ class VolumeXMLImporter():
         # This doesn't update the ids of the DB bounds, so they can't be used for other purposes
         models.BoundingBox.objects.bulk_create(dbBounds_list)
         return ImageToBounds
-
-
+    
+    
+    def AddOrUpdateFilterImageSet(self, channel_obj, filter_obj, imageset_obj, ZLevel):
+        
+        transform_name = imageset_obj.InputTransform
+        db_coord_space = GetCoordSpace(channel_obj, transform_name)
+        
+        (db_channel, created) = models.Channel.objects.get_or_create(name=channel_obj.Name)
+        if created:
+            db_channel.save()
+        
+        (db_filter, created) = models.Filter.objects.get_or_create(name=filter_obj.Name, channel=db_channel)
+        if created:
+            db_filter.save()
+        
+        for (level_number, image) in imageset_obj.GetImages():
+            img_name = os.path.basename(image.fullpath) 
+            (height, width) = nornir_imageregistration.GetImageSize(image.fullpath)
+            db_data = models.Data2D(name=img_name,
+                                     image=os.path.abspath(image.fullpath),
+                                     filter=db_filter,
+                                     level=level_number,
+                                     relative_path=image.fullpath,
+                                     coord_space=db_coord_space,
+                                     width=width,
+                                     height=height)
+            
+        
     def AddChannelMosaic(self, channel, transform_obj, ZLevel):
-
+        '''Add all of the tiles associated with the transforms in a mosaic file'''
+        
         (db_channel, created) = models.Channel.objects.get_or_create(name=channel.Name)
         if created:
             db_channel.save()
@@ -356,13 +403,12 @@ class VolumeXMLImporter():
             return
 
         mosaic = nornir_imageregistration.mosaic.Mosaic(copy.copy(mosaicfile.ImageToTransformString))
-
         db_bounds = CreateBoundingRect(mosaic.FixedBoundingBox, minZ=ZLevel)
         db_mosaic_coordspace = GetOrCreateCoordSpace(self.db_dataset, transform_obj.Name, bounds=db_bounds, ForceSaveOnCreate=True)
 
         db_mapping_list = []
 
-        print("Importing mappings from %s" % (transform_obj.FullPath))
+        print("Importing mappings from %s into %s" % (transform_obj.FullPath, db_mosaic_coordspace.name))
 
         # Batch create destination bounding rectangles for each transform
 
@@ -419,7 +465,7 @@ class VolumeXMLImporter():
         #Save the updated coordspace bounding box
         db_mosaic_coordspace.bounds.save()
         
-     
+        
     
 
     def AddTilePyramid(self, channel, filter_name, ZLevel, tile_pyramid):
