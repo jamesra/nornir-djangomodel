@@ -14,7 +14,7 @@ import glob
 from . import models
 import pickle
 
-from django.conf import settings
+import nornir_djangomodel.settings as settings
 
 
 class QuickPickleHelper():
